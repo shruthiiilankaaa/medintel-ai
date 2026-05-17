@@ -1,17 +1,29 @@
 # 🏥 MedIntel AI
+> Retrieval-Augmented Generation (RAG) system for medical document Q&A
 
-> **Retrieval-Augmented Generation (RAG) system for medical document Q&A**  
-> Upload PDFs → ask questions → get cited, confidence-scored answers in seconds.
+![Python](https://img.shields.io/badge/Python-3.11-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.114-green) ![LangChain](https://img.shields.io/badge/LangChain-0.2-orange) ![ChromaDB](https://img.shields.io/badge/ChromaDB-0.5-purple) ![HuggingFace](https://img.shields.io/badge/HuggingFace-Transformers-yellow)
+
+Upload medical PDFs → ask questions in natural language → get cited, confidence-scored answers in seconds.
 
 ---
 
 ## 🎯 What It Does
 
-MedIntel AI lets you upload medical PDFs (clinical guidelines, research papers, drug handbooks) and query them in natural language. Every answer is:
+MedIntel AI lets you upload medical PDFs (clinical guidelines, research papers, drug handbooks, pharmacology slides) and query them conversationally. Every answer is:
 
 - **Grounded** — generated only from your uploaded documents, never hallucinated
 - **Cited** — each answer links back to the exact source document + page number
 - **Scored** — a confidence score (High / Medium / Low) tells you how strongly the evidence supports the answer
+
+---
+
+## 🖥️ Demo
+
+> Upload a medical PDF → ask a clinical question → get a cited answer with confidence score
+
+**Example query:** *"Which antibiotics require therapeutic drug monitoring?"*
+
+**Answer:** Retrieved from page 13 of the uploaded pharmacology document, citing Vancomycin and Aminoglycosides with similarity scores and page references.
 
 ---
 
@@ -54,54 +66,49 @@ Streamlit UI (chat interface + citation cards)
 
 | Layer | Technology |
 |---|---|
-| **LLM** | HuggingFace `google/flan-t5-base` (swap for Mistral-7B for better quality) |
-| **Embeddings** | `sentence-transformers/all-MiniLM-L6-v2` (80 MB, CPU-friendly) |
-| **Vector DB** | ChromaDB (persistent, local) |
-| **RAG Framework** | LangChain |
-| **PDF Parsing** | PyMuPDF (fitz) |
-| **API** | FastAPI + Uvicorn |
-| **Frontend** | Streamlit |
-| **Containerisation** | Docker + docker-compose |
-| **Testing** | pytest |
+| LLM | HuggingFace `google/flan-t5-base` |
+| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` |
+| Vector DB | ChromaDB (persistent, local) |
+| RAG Framework | LangChain |
+| PDF Parsing | PyMuPDF (fitz) |
+| API | FastAPI + Uvicorn |
+| Frontend | Streamlit |
+| Testing | pytest (10/10 passing) |
+| Containerisation | Docker + docker-compose |
 
 ---
 
 ## 🚀 Quick Start
 
-### Option A — Docker (recommended, zero setup)
+### Option A — Local Python
 
 ```bash
-git clone https://github.com/yourname/medintel-ai.git
-cd medintel-ai
-docker-compose up --build
-```
-
-- **API**: http://localhost:8000/docs
-- **App**: http://localhost:8501
-
-### Option B — Local Python
-
-```bash
-# 1. Clone + venv
-git clone https://github.com/yourname/medintel-ai.git
+# 1. Clone and set up
+git clone https://github.com/YOURNAME/medintel-ai.git
 cd medintel-ai
 python -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
-
-# 2. Install
+source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# 3. Start FastAPI
+# 2. Start the API
 uvicorn app.main:app --reload --port 8000
 
-# 4. Start Streamlit (new terminal)
+# 3. Start the UI (new terminal)
 streamlit run frontend/app.py
+```
+
+- API docs: http://localhost:8000/docs
+- Chat UI: http://localhost:8501
+
+### Option B — Docker
+
+```bash
+docker-compose up --build
 ```
 
 ---
 
 ## 📁 Project Structure
-
 ```
 medintel-ai/
 ├── app/
@@ -128,39 +135,9 @@ medintel-ai/
 ├── Dockerfile.frontend
 └── docker-compose.yml
 ```
-
 ---
 
-## 🔧 Configuration (`.env`)
-
-| Variable | Default | Description |
-|---|---|---|
-| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | HuggingFace embedding model |
-| `LLM_MODEL` | `google/flan-t5-base` | HuggingFace generative model |
-| `CHUNK_SIZE` | `512` | Characters per chunk |
-| `CHUNK_OVERLAP` | `64` | Overlap between chunks |
-| `TOP_K_DOCS` | `4` | Chunks retrieved per query |
-| `CONFIDENCE_THRESHOLD` | `0.35` | Min cosine similarity to use a chunk |
-
-### Upgrading the LLM
-
-Change in `.env`:
-```
-LLM_MODEL=mistralai/Mistral-7B-Instruct-v0.2
-```
-Requires ~8 GB RAM. Or use OpenAI by replacing the pipeline in `rag_chain.py`.
-
----
-
-## 🧪 Running Tests
-
-```bash
-pytest tests/ -v
-```
-
----
-
-## 📡 API Reference
+## 📡 API Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -169,36 +146,40 @@ pytest tests/ -v
 | `POST` | `/api/v1/query` | Ask a question, get RAG answer |
 | `GET` | `/docs` | Swagger UI |
 
-### Example query (curl)
+---
+
+## ⚙️ Configuration
+
+Edit `.env` to customise:
+
+| Variable | Default | Description |
+|---|---|---|
+| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | HuggingFace embedding model |
+| `LLM_MODEL` | `google/flan-t5-base` | Generative model (swap for Mistral-7B for better answers) |
+| `CHUNK_SIZE` | `512` | Characters per chunk |
+| `TOP_K_DOCS` | `4` | Chunks retrieved per query |
+| `CONFIDENCE_THRESHOLD` | `0.35` | Min cosine similarity to use a chunk |
+
+---
+
+## 🧪 Tests
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What are the contraindications for ibuprofen?", "top_k": 4}'
+pytest tests/ -v
+# 10 passed, 4 warnings
 ```
 
 ---
 
-## 📝 Resume Bullets
+## 📝 Resume Bullet
 
-```
-• Built a production-grade RAG healthcare assistant (MedIntel AI) using LangChain,
-  HuggingFace Transformers (all-MiniLM-L6-v2, flan-t5), and ChromaDB for semantic
-  retrieval over medical PDFs with citation-based, confidence-scored answers.
-
-• Engineered a full-stack AI application with FastAPI (REST backend), Streamlit
-  (chat UI), and Docker Compose for containerised deployment, processing PDFs into
-  512-token overlapping chunks for high-precision semantic search.
-
-• Implemented cosine similarity–based confidence scoring to surface retrieval
-  quality to end users, reducing hallucination risk in medical Q&A workflows.
-```
+> Built a production-grade Retrieval-Augmented Generation (RAG) healthcare assistant (MedIntel AI) using LangChain, HuggingFace Transformers (all-MiniLM-L6-v2, flan-t5), and ChromaDB for semantic retrieval over medical PDFs, with citation-based answers, cosine similarity confidence scoring, a FastAPI REST backend, and a Streamlit chat interface — containerised with Docker.
 
 ---
 
 ## ⚠️ Disclaimer
 
-This tool is for research and educational purposes. It is **not** a substitute for professional medical advice, diagnosis, or treatment.
+This tool is for research and educational purposes only. Not a substitute for professional medical advice.
 
 ---
 
