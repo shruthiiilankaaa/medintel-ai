@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+
+  # ── FastAPI RAG Backend ──────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: medintel-api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist ChromaDB between container restarts
+      - chroma_data:/app/data/chroma_db
+    environment:
+      - CHROMA_PERSIST_DIR=/app/data/chroma_db
+      - LLM_MODEL=google/flan-t5-base
+      - EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s  # allow model loading time
+
+  # ── Streamlit Frontend ────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: medintel-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - API_BASE_URL=http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  chroma_data:
+    driver: local
