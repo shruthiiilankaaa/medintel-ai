@@ -4,7 +4,6 @@
 ![Python](https://img.shields.io/badge/Python-3.11-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.114-green) ![LangChain](https://img.shields.io/badge/LangChain-0.2-orange) ![ChromaDB](https://img.shields.io/badge/ChromaDB-0.5-purple) ![HuggingFace](https://img.shields.io/badge/HuggingFace-Transformers-yellow)
 
 Upload medical PDFs → ask questions in natural language → get cited, confidence-scored answers in seconds.
-'NEED TO DO THE DOCKER PART'
 ---
 
 ## 🎯 What It Does
