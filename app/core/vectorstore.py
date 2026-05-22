@@ -1,22 +1,28 @@
 """
 app/core/vectorstore.py
-HuggingFace embeddings + ChromaDB vector store management.
-Handles: initialisation, adding documents, semantic search.
+HuggingFace embeddings + Supabase pgvector vector store management.
+Handles: embeddings, storing documents, semantic search.
 """
+
 import logging
+import json
 from typing import List, Tuple
 
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
 from langchain.schema import Document
+
+from sqlalchemy import create_engine, text
 
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+# ── Database Engine ───────────────────────────────────────────────────────────
 
-# ── Singleton embedding model (expensive to load repeatedly) ─────────────────
+engine = create_engine(settings.supabase_db_url)
+
+# ── Singleton embedding model ────────────────────────────────────────────────
 
 _embedding_model: HuggingFaceEmbeddings | None = None
 
@@ -24,82 +30,107 @@ _embedding_model: HuggingFaceEmbeddings | None = None
 def get_embeddings() -> HuggingFaceEmbeddings:
     """
     Load the HuggingFace sentence-transformer model once and cache it.
-    all-MiniLM-L6-v2 is 80 MB, fast on CPU, great for medical text retrieval.
     """
     global _embedding_model
+
     if _embedding_model is None:
         logger.info(f"Loading embedding model: {settings.embedding_model}")
+
         _embedding_model = HuggingFaceEmbeddings(
             model_name=settings.embedding_model,
             model_kwargs={"device": "cpu"},
-            encode_kwargs={"normalize_embeddings": True},  # cosine similarity
+            encode_kwargs={"normalize_embeddings": True},
         )
+
         logger.info("Embedding model loaded.")
+
     return _embedding_model
 
 
-# ── Singleton vector store ────────────────────────────────────────────────────
-
-_vectorstore: Chroma | None = None
-
-
-def get_vectorstore() -> Chroma:
-    """
-    Return a persistent ChromaDB instance.
-    Creates the collection if it doesn't exist yet.
-    """
-    global _vectorstore
-    if _vectorstore is None:
-        _vectorstore = Chroma(
-            collection_name=settings.chroma_collection,
-            embedding_function=get_embeddings(),
-            persist_directory=settings.chroma_persist_dir,
-        )
-        logger.info(
-            f"ChromaDB initialised at {settings.chroma_persist_dir}"
-            f" | collection: {settings.chroma_collection}"
-        )
-    return _vectorstore
-
-
-# ── Operations ────────────────────────────────────────────────────────────────
+# ── Operations ───────────────────────────────────────────────────────────────
 
 def add_documents(chunks: List[Document]) -> int:
     """
-    Embed and store chunks in ChromaDB.
-    Returns number of chunks added.
+    Embed and store chunks in Supabase pgvector.
     """
-    vs = get_vectorstore()
-    vs.add_documents(chunks)
-    vs.persist()
-    logger.info(f"Added {len(chunks)} chunks to vector store.")
+    embeddings_model = get_embeddings()
+
+    texts = [chunk.page_content for chunk in chunks]
+    embeddings = embeddings_model.embed_documents(texts)
+
+    with engine.begin() as conn:
+        for chunk, embedding in zip(chunks, embeddings):
+            conn.execute(
+                text("""
+                    INSERT INTO documents (content, metadata, embedding)
+                    VALUES (:content, :metadata, :embedding)
+                """),
+                {
+                    "content": chunk.page_content,
+                    "metadata": json.dumps(chunk.metadata),
+                    "embedding": str(embedding),
+                },
+            )
+
+    logger.info(f"Added {len(chunks)} chunks to Supabase.")
     return len(chunks)
 
 
 def similarity_search_with_scores(
     query: str,
     k: int | None = None,
-) -> List[Tuple[Document, float]]:
+) -> List[Tuple[str, float]]:
     """
-    Return the top-k most relevant chunks with their cosine similarity scores.
-    Score range: 0.0 (unrelated) – 1.0 (identical).
+    Return top-k relevant chunks using pgvector similarity search.
     """
     k = k or settings.top_k_docs
-    vs = get_vectorstore()
-    results = vs.similarity_search_with_relevance_scores(query, k=k)
-    return results  # [(Document, score), ...]
+
+    embeddings_model = get_embeddings()
+    query_embedding = embeddings_model.embed_query(query)
+
+    with engine.begin() as conn:
+        result = conn.execute(
+            text("""
+                SELECT content, metadata, similarity
+                FROM match_documents(
+                    CAST(:query_embedding AS vector),
+                    :match_count
+                )
+            """),
+            {
+                "query_embedding": str(query_embedding),
+                "match_count": k,
+            },
+        )
+
+        rows = result.fetchall()
+
+    logger.info(f"Retrieved {len(rows)} similar documents.")
+
+    return rows
 
 
 def collection_size() -> int:
-    """How many chunks are currently indexed."""
-    vs = get_vectorstore()
-    return vs._collection.count()
+    """
+    Return number of stored chunks.
+    """
+    with engine.begin() as conn:
+        result = conn.execute(
+            text("SELECT COUNT(*) FROM documents")
+        )
+
+        count = result.scalar()
+
+    return count
 
 
 def clear_collection() -> None:
-    """Delete all documents from the collection (useful for testing)."""
-    global _vectorstore
-    vs = get_vectorstore()
-    vs.delete_collection()
-    _vectorstore = None
-    logger.warning("Vector store collection cleared.")
+    """
+    Delete all documents from Supabase documents table.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            text("DELETE FROM documents")
+        )
+
+    logger.warning("Supabase vector store cleared.")

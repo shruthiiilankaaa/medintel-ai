@@ -2,8 +2,10 @@
 app/core/config.py
 Centralised settings loaded from .env
 """
-from pydantic_settings import BaseSettings
+
 from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -31,9 +33,17 @@ class Settings(BaseSettings):
     streamlit_port: int = 8501
     api_base_url: str = "http://localhost:8000"
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    # Supabase
+    supabase_url: str
+    supabase_service_key: str
+    supabase_db_url: str
+
+    # Pydantic v2 config
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        extra="ignore"
+    )
 
 
 @lru_cache()

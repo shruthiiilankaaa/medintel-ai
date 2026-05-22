@@ -5,9 +5,9 @@ WORKDIR /app
 
 # System deps for PyMuPDF and torch
 RUN apt-get update && apt-get install -y \
-    gcc g++ libgl1-mesa-glx libglib2.0-0 \
+    gcc g++ libgl1-mesa-dev libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
-
+    
 # Install Python deps first (layer caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
