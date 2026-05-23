@@ -5,10 +5,9 @@ langchain-huggingface==0.0.3
 
 # LLM
 transformers==4.44.2
-torch==2.4.0
+torch==2.12.0
 accelerate==0.34.0
 sentencepiece==0.2.0
-hf_xet==1.1.0
 
 # Embeddings + Vector DB
 sentence-transformers==3.0.1
