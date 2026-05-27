@@ -1,27 +1,19 @@
 """
 app/core/rag_chain.py
-The heart of MedIntel AI:
-  - Retrieves relevant chunks from Supabase pgvector
-  - Builds a context-aware prompt
-  - Generates answers via a HuggingFace LLM
-  - Returns answer + citations + confidence score
+RAG pipeline using Groq API for LLM (no local model = no OOM on Render)
 """
-
-import json
+import os
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List
 
-from transformers import pipeline, Pipeline
-
+from langchain.schema import Document
 from app.core.vectorstore import similarity_search_with_scores
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-
-# ── Data classes ──────────────────────────────────────────────────────────────
 
 @dataclass
 class Citation:
@@ -44,166 +36,81 @@ class RAGResponse:
     context_used: str = ""
 
 
-# ── LLM singleton ─────────────────────────────────────────────────────────────
-
-_llm_pipeline: Pipeline | None = None
-
-
-def get_llm() -> Pipeline:
-    """
-    Load HuggingFace generation pipeline once.
-    """
-    global _llm_pipeline
-
-    if _llm_pipeline is None:
-        logger.info(f"Loading LLM: {settings.llm_model}")
-
-        _llm_pipeline = pipeline(
-            "text2text-generation",
-            model=settings.llm_model,
-            max_new_tokens=512,
-            do_sample=False,
-        )
-
-        logger.info("LLM ready.")
-
-    return _llm_pipeline
-
-
-# ── Prompt builder ────────────────────────────────────────────────────────────
-
 SYSTEM_PROMPT = """You are MedIntel AI, a precise medical document assistant.
-
 Answer the question using ONLY the provided context from medical documents.
-
-If the context does not contain enough information, say:
-"I cannot find a confident answer in the uploaded documents."
-
-Always be factual, concise, and grounded in the context.
-Do NOT invent medical information.
-"""
+If the context does not contain enough information, say "I cannot find a confident answer in the uploaded documents."
+Always be factual and concise."""
 
 
-def build_prompt(query: str, context_chunks: List[dict]) -> str:
-    """
-    Build prompt from retrieved Supabase rows.
-    """
-
+def build_prompt(query: str, context_chunks: List[Document]) -> str:
     context_text = "\n\n---\n\n".join(
-        f"[Source: {chunk['citation']}]\n{chunk['content']}"
-        for chunk in context_chunks
+        f"[Source: {doc.metadata.get('citation', 'unknown')}]\n{doc.page_content}"
+        for doc in context_chunks
     )
-
     return (
         f"{SYSTEM_PROMPT}\n\n"
         f"CONTEXT FROM MEDICAL DOCUMENTS:\n{context_text}\n\n"
-        f"QUESTION: {query}\n\n"
-        f"ANSWER:"
+        f"QUESTION: {query}\n\nANSWER:"
     )
 
-
-# ── Confidence scoring ────────────────────────────────────────────────────────
 
 def compute_confidence(scores: List[float]) -> float:
     if not scores:
         return 0.0
-
     top_scores = sorted(scores, reverse=True)[:2]
-
     return round(sum(top_scores) / len(top_scores), 3)
 
 
-# ── Main RAG pipeline ─────────────────────────────────────────────────────────
+def generate_answer(prompt: str) -> str:
+    from groq import Groq
+    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    response = client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=512,
+        temperature=0.1,
+    )
+    return response.choices[0].message.content.strip()
+
 
 def answer_query(query: str) -> RAGResponse:
-    """
-    Full RAG pipeline using Supabase pgvector.
-    """
-
-    # Step 1: Retrieve similar chunks
-    results = similarity_search_with_scores(
-        query,
-        k=settings.top_k_docs,
-    )
+    results = similarity_search_with_scores(query, k=settings.top_k_docs)
 
     if not results:
         return RAGResponse(
-            answer="No relevant documents found.",
+            answer="No documents uploaded yet. Please upload a medical PDF first.",
             citations=[],
             confidence=0.0,
             query=query,
         )
 
-    citations: List[Citation] = []
-    context_chunks = []
-    scores: List[float] = []
+    citations = []
+    strong_docs = []
+    scores = []
 
-    # Step 2: Process Supabase rows
-    for content, metadata, similarity in results:
+    for doc, score in results:
+        citations.append(Citation(
+            source=doc.metadata.get("source", "unknown"),
+            page=doc.metadata.get("page", 0),
+            chunk_text=doc.page_content[:300],
+            score=round(score, 3),
+        ))
+        if score >= settings.confidence_threshold:
+            strong_docs.append(doc)
+            scores.append(score)
 
-        # metadata may arrive as string/json
-        if isinstance(metadata, str):
-            metadata = json.loads(metadata)
-
-        citation = Citation(
-            source=metadata.get("source", "unknown"),
-            page=metadata.get("page", 0),
-            chunk_text=content[:300],
-            score=round(similarity, 3),
-        )
-
-        citations.append(citation)
-
-        if similarity >= settings.confidence_threshold:
-            context_chunks.append({
-                "content": content,
-                "citation": metadata.get(
-                    "citation",
-                    f"{citation.source} — page {citation.page}"
-                ),
-            })
-
-            scores.append(similarity)
-
-    # fallback if no strong matches
-    if not context_chunks:
-        for content, metadata, similarity in results[:2]:
-
-            if isinstance(metadata, str):
-                metadata = json.loads(metadata)
-
-            context_chunks.append({
-                "content": content,
-                "citation": metadata.get(
-                    "citation",
-                    f"{metadata.get('source', 'unknown')} — page {metadata.get('page', 0)}"
-                ),
-            })
-
-    # Step 3: Build prompt
-    prompt = build_prompt(query, context_chunks)
-
-    # Step 4: Generate answer
-    llm = get_llm()
+    context_docs = strong_docs if strong_docs else [r[0] for r in results[:2]]
+    prompt = build_prompt(query, context_docs)
 
     try:
-        output = llm(prompt)
-        answer = output[0]["generated_text"].strip()
-
+        answer = generate_answer(prompt)
     except Exception as e:
-        logger.error(f"LLM generation failed: {e}")
-
-        answer = "Error generating answer. Please try again."
-
-    # Step 5: Confidence
-    confidence = compute_confidence(
-        scores if scores else [r[2] for r in results]
-    )
+        logger.error(f"Groq API failed: {e}")
+        answer = "Error generating answer. Check your GROQ_API_KEY."
 
     return RAGResponse(
         answer=answer,
         citations=citations,
-        confidence=confidence,
+        confidence=compute_confidence(scores if scores else [r[1] for r in results]),
         query=query,
-        context_used=prompt[:500] + "...",
     )

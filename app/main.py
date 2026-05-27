@@ -31,8 +31,7 @@ async def lifespan(app: FastAPI):
     from app.core.vectorstore import get_embeddings
     from app.core.rag_chain import get_llm
     get_embeddings()  # loads sentence-transformer
-    get_llm()         # loads flan-t5
-    logger.info("✅ Models ready. MedIntel AI is live.")
+    logger.info("✅ Using Groq API for LLM — no local model needed.")
     yield
     logger.info("🛑 MedIntel AI shutting down.")
 
