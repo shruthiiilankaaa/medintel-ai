@@ -65,11 +65,14 @@ async def query_documents(request: QueryRequest):
 async def health_check():
     try:
         docs = collection_size()
+        db_status = "connected"
     except Exception as e:
         docs = -1
+        db_status = str(e)
 
     return {
         "status": "ok",
+        "database": db_status,
         "documents_indexed": docs,
         "embedding_model": settings.embedding_model,
         "llm_model": settings.llm_model,
