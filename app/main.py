@@ -26,15 +26,9 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Pre-load the embedding model and LLM at startup to avoid cold starts."""
-    logger.info("⚡ MedIntel AI starting up — warming up models...")
-    from app.core.vectorstore import get_embeddings
-    from app.core.rag_chain import get_llm
-    get_embeddings()  # loads sentence-transformer
-    logger.info("✅ Using Groq API for LLM.")
+    logger.info("⚡ MedIntel AI starting up...")
     yield
     logger.info("🛑 MedIntel AI shutting down.")
-
 
 # ── App factory ───────────────────────────────────────────────────────────────
 
