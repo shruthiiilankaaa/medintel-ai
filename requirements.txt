@@ -1,36 +1,22 @@
-# Core RAG stack
 langchain==0.2.16
 langchain-community==0.2.16
 langchain-huggingface==0.0.3
-
-# LLM
 transformers==4.44.2
-
-# Embeddings + Vector DB
 sentence-transformers==3.0.1
 sqlalchemy==2.0.36
 psycopg2-binary==2.9.10
 pgvector==0.3.6
 supabase==2.9.1
-
-# PDF processing
+groq==0.9.0
 pymupdf==1.24.10
 pypdf==4.3.1
-
-# API
 fastapi==0.114.0
 uvicorn[standard]==0.30.6
 python-multipart==0.0.9
 pydantic==2.10.6
 pydantic-core==2.27.2
 pydantic-settings==2.4.0
-groq==0.9.0
-
-# Frontend
-streamlit==1.38.0
 requests==2.32.3
-
-# Utilities
 python-dotenv==1.0.1
 numpy==1.26.4
 tqdm==4.66.5
