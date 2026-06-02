@@ -61,9 +61,16 @@ async def query_documents(request: QueryRequest):
         total_citations=len(citations_out),
     )
 
-
 @router.get("/health", tags=["System"])
 async def health_check():
+    try:
+        docs = collection_size()
+    except Exception as e:
+        docs = -1
+
     return {
-        "status": "ok"
+        "status": "ok",
+        "documents_indexed": docs,
+        "embedding_model": settings.embedding_model,
+        "llm_model": settings.llm_model,
     }
