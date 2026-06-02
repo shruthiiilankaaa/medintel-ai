@@ -71,9 +71,8 @@ async def health_check():
         db_status = str(e)
 
     return {
-        "status": "ok",
-        "database": db_status,
-        "documents_indexed": docs,
-        "embedding_model": settings.embedding_model,
-        "llm_model": settings.llm_model,
-    }
+    "status": "ok",
+    "debug_version": "b7931d6",
+    "database": db_status,
+    "documents_indexed": docs,
+}
