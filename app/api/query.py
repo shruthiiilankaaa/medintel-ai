@@ -62,12 +62,8 @@ async def query_documents(request: QueryRequest):
     )
 
 
-@router.get("/health", response_model=HealthResponse, tags=["System"])
+@router.get("/health", tags=["System"])
 async def health_check():
-    """System health + stats."""
-    return HealthResponse(
-        status="ok",
-        documents_indexed=collection_size(),
-        embedding_model=settings.embedding_model,
-        llm_model=settings.llm_model,
-    )
+    return {
+        "status": "ok"
+    }
