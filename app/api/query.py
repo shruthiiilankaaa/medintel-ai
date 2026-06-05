@@ -70,9 +70,9 @@ async def health_check():
         docs = -1
         db_status = str(e)
 
-    return {
-    "status": "ok",
-    "debug_version": "b7931d6",
-    "database": db_status,
-    "documents_indexed": docs,
-}
+    return HealthResponse(
+    status="ok",
+    documents_indexed=collection_size(),
+    embedding_model=settings.embedding_model,
+    llm_model=settings.llm_model,
+)
