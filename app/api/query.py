@@ -39,9 +39,11 @@ async def query_documents(request: QueryRequest):
     try:
         rag_response = answer_query(request.query)
     except Exception as e:
-        logger.error(f"Query failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Query error: {str(e)}")
-
+        logger.exception("FULL QUERY ERROR")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Query error: {str(e)}"
+        )
     citations_out = [
         CitationOut(
             source=c.source,
