@@ -105,24 +105,54 @@ def answer_query(query: str) -> RAGResponse:
     strong_docs = []
     scores = []
 
-    for doc, score in results:
+    for item in results:
+
+        # Handle both:
+        # (Document, score)
+        # (content, metadata, score)
+
+        if len(item) == 2:
+            doc, score = item
+
+        elif len(item) == 3:
+            content, metadata, score = item
+
+            if isinstance(metadata, str):
+                import json
+                metadata = json.loads(metadata)
+
+            doc = Document(
+                page_content=content,
+                metadata=metadata or {}
+            )
+
+        else:
+            continue
+
         citations.append(
             Citation(
                 source=doc.metadata.get("source", "unknown"),
                 page=doc.metadata.get("page", 0),
                 chunk_text=doc.page_content[:300],
-                score=round(score, 3),
+                score=round(float(score), 3),
             )
         )
 
         if score >= settings.confidence_threshold:
             strong_docs.append(doc)
-            scores.append(score)
+            scores.append(float(score))
 
     context_docs = (
         strong_docs
         if strong_docs
-        else [doc for doc, _ in results[:2]]
+        else [
+            item[0] if len(item) == 2
+            else Document(
+                page_content=item[0],
+                metadata=item[1] if isinstance(item[1], dict) else {}
+            )
+            for item in results[:2]
+        ]
     )
 
     try:
@@ -135,12 +165,9 @@ def answer_query(query: str) -> RAGResponse:
 
     except Exception as e:
         logger.exception("Groq generation failed")
-
         answer = f"Error generating answer: {str(e)}"
 
-    confidence = compute_confidence(
-        scores if scores else [score for _, score in results]
-    )
+    confidence = compute_confidence(scores)
 
     return RAGResponse(
         answer=answer,
