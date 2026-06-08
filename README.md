@@ -1,72 +1,96 @@
 # 🏥 MedIntel AI
 
-> Retrieval-Augmented Generation (RAG) system for medical document question answering using FastAPI, Groq, Supabase pgvector, and LangChain.
+> A Retrieval-Augmented Generation (RAG) system for medical document question answering using FastAPI, LangChain, Groq, and Supabase pgvector.
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.114-green)
-![LangChain](https://img.shields.io/badge/LangChain-0.2-orange)
-![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-brightgreen)
-![Groq](https://img.shields.io/badge/Groq-Llama3.1-red)
-
-Upload medical PDFs → ask questions in natural language → receive cited, confidence-scored answers in seconds.
-
----
-
-## 🎯 Features
-
-* Upload and index medical PDFs
-* Semantic search using vector embeddings
-* Citation-aware answers with source attribution
-* Confidence scoring for retrieved evidence
-* Supabase pgvector cloud vector database
-* Groq-powered LLM responses
-* FastAPI backend deployed on Render
-* Swagger API documentation
+![LangChain](https://img.shields.io/badge/LangChain-RAG-orange)
+![Supabase](https://img.shields.io/badge/Supabase-pgvector-brightgreen)
+![Groq](https://img.shields.io/badge/Groq-Llama%203.1-red)
+![Render](https://img.shields.io/badge/Deployment-Render-purple)
 
 ---
 
-## 🧠 What It Does
+## 🚀 Overview
 
-MedIntel AI enables users to upload medical documents such as:
+MedIntel AI allows users to upload medical PDFs and ask questions in natural language.
 
-* Clinical guidelines
-* Pharmacology slides
-* Medical research papers
-* Treatment protocols
+Instead of manually searching through lengthy clinical documents, users can ask questions conversationally and receive answers grounded in the uploaded content, complete with source citations, page references, similarity scores, and confidence levels.
 
-Users can then ask questions in natural language.
+This project was built to explore modern Retrieval-Augmented Generation (RAG) architectures and gain hands-on experience with vector databases, semantic search, cloud deployment, and LLM integration.
 
-Every answer includes:
+---
 
-* Retrieved evidence from the uploaded document
+## ✨ Features
+
+### 📄 Medical PDF Processing
+
+* Upload medical PDFs, clinical guidelines, research papers, and lecture slides
+* Automatic text extraction using PyMuPDF
+* Intelligent document chunking for efficient retrieval
+
+### 🔍 Semantic Search
+
+* Generates embeddings using `all-MiniLM-L6-v2`
+* Stores vectors in Supabase PostgreSQL with pgvector
+* Retrieves the most relevant chunks using similarity search
+
+### 🤖 Context-Aware Answer Generation
+
+* Uses Groq's Llama 3.1 model for response generation
+* Answers are grounded only in retrieved document context
+* Reduces hallucinations through retrieval-based prompting
+
+### 📌 Source Attribution
+
+Every response includes:
+
 * Source document name
-* Page number references
-* Similarity scores
-* Confidence labels (High / Medium / Low)
+* Page number
+* Similarity score
+* Confidence level
+
+### ☁️ Cloud Deployment
+
+* Backend deployed on Render
+* Vector database hosted on Supabase
+* Public API with Swagger documentation
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ System Architecture
 
+```text
 PDF Upload
-↓
+    │
+    ▼
 PyMuPDF Text Extraction
-↓
-LangChain Text Chunking
-↓
-all-MiniLM-L6-v2 Embeddings
-↓
+    │
+    ▼
+LangChain Chunking
+    │
+    ▼
+Sentence Transformer Embeddings
+(all-MiniLM-L6-v2)
+    │
+    ▼
 Supabase PostgreSQL + pgvector
-↓
+    │
+    ▼
 Semantic Similarity Search
-↓
+    │
+    ▼
 Groq Llama 3.1
-↓
+    │
+    ▼
 Answer Generation
-↓
-Citations + Confidence Scores
-↓
+    │
+    ▼
+Citations + Confidence Score
+    │
+    ▼
 FastAPI Response
+```
 
 ---
 
@@ -74,108 +98,179 @@ FastAPI Response
 
 | Layer            | Technology                             |
 | ---------------- | -------------------------------------- |
-| Backend          | FastAPI                                |
+| Backend API      | FastAPI                                |
+| API Server       | Uvicorn                                |
+| RAG Framework    | LangChain                              |
 | LLM              | Groq (Llama 3.1 Instant)               |
 | Embeddings       | sentence-transformers/all-MiniLM-L6-v2 |
 | Vector Database  | Supabase PostgreSQL + pgvector         |
-| RAG Framework    | LangChain                              |
 | PDF Processing   | PyMuPDF                                |
-| API Server       | Uvicorn                                |
+| Configuration    | Pydantic Settings                      |
 | Deployment       | Render                                 |
 | Database Hosting | Supabase                               |
 
 ---
 
+## 📊 Example Workflow
+
+### User Query
+
+```text
+What is MIC?
+```
+
+### Retrieval Pipeline
+
+1. Convert query into embeddings
+2. Search pgvector for semantically similar chunks
+3. Retrieve top matching document sections
+4. Build contextual prompt
+5. Send context to Groq Llama 3.1
+6. Generate grounded answer
+7. Return citations and confidence score
+
+### Example Response
+
+```json
+{
+  "answer": "MIC stands for Minimum Inhibitory Concentration.",
+  "confidence": 0.55,
+  "confidence_label": "Medium",
+  "citations": [
+    {
+      "source": "antimicrobials.pdf",
+      "page": 10,
+      "score": 0.594
+    }
+  ]
+}
+```
+
+---
+
 ## 📡 API Endpoints
 
-| Method | Endpoint       | Description              |
-| ------ | -------------- | ------------------------ |
-| GET    | /api/v1/health | System status            |
-| POST   | /api/v1/upload | Upload and index PDF     |
-| POST   | /api/v1/query  | Query uploaded documents |
-| GET    | /docs          | Swagger Documentation    |
+| Method | Endpoint         | Description                               |
+| ------ | ---------------- | ----------------------------------------- |
+| GET    | `/api/v1/health` | Service health and indexed document count |
+| POST   | `/api/v1/upload` | Upload and index a PDF                    |
+| POST   | `/api/v1/query`  | Query uploaded documents                  |
+| GET    | `/docs`          | Interactive Swagger documentation         |
 
 ---
 
-## 🚀 Deployment
+## ⚙️ Environment Variables
 
-Backend deployed on Render.
+Create a `.env` file:
 
-Vector storage hosted on Supabase PostgreSQL with pgvector.
+```env
+# Groq
+GROQ_API_KEY=your_groq_api_key
 
-Example deployment flow:
-
-User Query
-↓
-Render-hosted FastAPI API
-↓
-Supabase Vector Search
-↓
-Groq LLM
-↓
-Grounded Answer + Citations
+# Supabase
+SUPABASE_URL=your_supabase_url
+SUPABASE_SERVICE_KEY=your_service_key
+SUPABASE_DB_URL=your_postgresql_connection_string
+```
 
 ---
 
-## 📊 Example Query
+## 💻 Local Setup
 
-Question:
+### Clone Repository
 
-What is MIC?
+```bash
+git clone https://github.com/yourusername/medintel-ai.git
 
-Response:
+cd medintel-ai
+```
 
-MIC stands for Minimum Inhibitory Concentration.
+### Create Virtual Environment
 
-Source:
+```bash
+python -m venv venv
 
-* antimicrobials.pdf
-* Page 10
+# Windows
+venv\Scripts\activate
 
-Confidence:
+# Linux/Mac
+source venv/bin/activate
+```
 
-* Medium (0.55)
+### Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### Start FastAPI Server
+
+```bash
+uvicorn app.main:app --reload
+```
+
+Open:
+
+```text
+http://localhost:8000/docs
+```
 
 ---
 
-## 📁 Project Structure
+## 📚 Key Concepts Learned
 
-medintel-ai/
+### Retrieval-Augmented Generation (RAG)
 
-├── app/
+Built a complete RAG pipeline that retrieves relevant document context before generating answers.
 
-│ ├── api/
+### Semantic Search
 
-│ ├── core/
+Implemented vector similarity search using embeddings instead of traditional keyword matching.
 
-│ ├── models/
+### Vector Databases
 
-│ └── main.py
+Worked with PostgreSQL + pgvector to store and retrieve high-dimensional embeddings.
 
-├── requirements.txt
+### Cloud Deployment
 
-├── README.md
+Deployed and debugged production workloads on Render and Supabase.
 
-└── .env
+### LLM Integration
+
+Integrated Groq-hosted Llama 3.1 models for grounded answer generation.
 
 ---
 
-## 💡 Key Learning Outcomes
+## 🔧 Engineering Challenges Solved
 
-* Retrieval-Augmented Generation (RAG)
-* Semantic Search
-* Vector Databases
-* pgvector
-* FastAPI API Development
-* Cloud Deployment
-* LLM Integration
-* Medical Document Processing
+During development, several production-level issues were encountered and resolved:
+
+* Render deployment failures and startup issues
+* Memory constraints while loading embedding models
+* Supabase PostgreSQL connectivity problems
+* pgvector integration and similarity search debugging
+* Retrieval result formatting issues
+* Groq model deprecation and migration
+* Environment variable management in production
+
+These challenges provided practical experience in debugging cloud-native AI systems.
+
+---
+
+## 🚀 Future Improvements
+
+* Multi-document retrieval
+* Hybrid search (BM25 + Vector Search)
+* Cross-encoder reranking
+* User authentication
+* Document-level access control
+* Frontend dashboard for document management
 
 ---
 
 ## 📝 Resume Highlight
 
-Built MedIntel AI, a cloud-deployed Retrieval-Augmented Generation (RAG) platform for medical document Q&A using FastAPI, LangChain, Groq Llama 3.1, and Supabase pgvector. Implemented semantic retrieval, citation-aware responses, confidence scoring, and cloud-hosted vector search over uploaded medical PDFs.
+Built and deployed a Retrieval-Augmented Generation (RAG) platform for medical document question answering using FastAPI, LangChain, Groq Llama 3.1, and Supabase pgvector. Implemented semantic search, citation-aware responses, confidence scoring, and cloud-hosted vector retrieval over uploaded medical PDFs.
 
 ---
 
