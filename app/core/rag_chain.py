@@ -1,81 +1,154 @@
-import os
+"""
+app/core/vectorstore.py
+HuggingFace embeddings + Supabase pgvector vector store management.
+Handles: embeddings, storing documents, semantic search.
+"""
+
 import logging
-from dataclasses import dataclass
-from typing import List
+import json
+from typing import List, Tuple
+
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.schema import Document
-from app.core.vectorstore import similarity_search_with_scores
+
+from sqlalchemy import create_engine, text
+
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-@dataclass
-class Citation:
-    source: str
-    page: int
-    chunk_text: str
-    score: float
+# ── Database Engine ───────────────────────────────────────────────────────────
 
-@dataclass
-class RAGResponse:
-    answer: str
-    citations: List[Citation]
-    confidence: float
-    query: str
-    context_used: str = ""
+engine = create_engine(settings.supabase_db_url)
 
-SYSTEM_PROMPT = """You are MedIntel AI, a medical document assistant.
-Answer using ONLY the provided context. If context is insufficient, say so."""
+# ── Singleton embedding model ────────────────────────────────────────────────
 
-def build_prompt(query: str, docs: List[Document]) -> str:
-    context = "\n\n---\n\n".join(
-        f"[{doc.metadata.get('citation','unknown')}]\n{doc.page_content}"
-        for doc in docs
-    )
-    return f"{SYSTEM_PROMPT}\n\nCONTEXT:\n{context}\n\nQUESTION: {query}\n\nANSWER:"
+_embedding_model: HuggingFaceEmbeddings | None = None
 
-def compute_confidence(scores: List[float]) -> float:
-    if not scores:
-        return 0.0
-    top = sorted(scores, reverse=True)[:2]
-    return round(sum(top) / len(top), 3)
 
-def generate_answer(prompt: str) -> str:
-    from groq import Groq
-    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-    response = client.chat.completions.create(
-        model="llama3-8b-8192",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=512,
-        temperature=0.1,
-    )
-    return response.choices[0].message.content.strip()
+def get_embeddings() -> HuggingFaceEmbeddings:
+    """
+    Load the HuggingFace sentence-transformer model once and cache it.
+    """
+    global _embedding_model
 
-def answer_query(query: str) -> RAGResponse:
-    results = similarity_search_with_scores(query, k=settings.top_k_docs)
-    if not results:
-        return RAGResponse(answer="No documents uploaded yet.", citations=[], confidence=0.0, query=query)
-    citations = []
-    strong_docs, scores = [], []
-    for doc, score in results:
-        citations.append(Citation(
-            source=doc.metadata.get("source", "unknown"),
-            page=doc.metadata.get("page", 0),
-            chunk_text=doc.page_content[:300],
-            score=round(score, 3),
-        ))
-        if score >= settings.confidence_threshold:
-            strong_docs.append(doc)
-            scores.append(score)
-    context_docs = strong_docs if strong_docs else [r[0] for r in results[:2]]
-    try:
-        answer = generate_answer(build_prompt(query, context_docs))
-    except Exception as e:
-        logger.error(f"Groq failed: {e}")
-        answer = f"Error: {str(e)}"
-    return RAGResponse(
-        answer=answer,
-        citations=citations,
-        confidence=compute_confidence(scores if scores else [r[1] for r in results]),
-        query=query,
-    )
+    if _embedding_model is None:
+        logger.info(f"Loading embedding model: {settings.embedding_model}")
+
+        _embedding_model = HuggingFaceEmbeddings(
+            model_name=settings.embedding_model,
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"normalize_embeddings": True},
+        )
+
+        logger.info("Embedding model loaded.")
+
+    return _embedding_model
+
+
+# ── Operations ───────────────────────────────────────────────────────────────
+
+def add_documents(chunks: List[Document]) -> int:
+    """
+    Embed and store chunks in Supabase pgvector.
+    """
+    embeddings_model = get_embeddings()
+
+    texts = [chunk.page_content for chunk in chunks]
+    embeddings = embeddings_model.embed_documents(texts)
+
+    with engine.begin() as conn:
+        for chunk, embedding in zip(chunks, embeddings):
+            conn.execute(
+                text("""
+                    INSERT INTO documents (content, metadata, embedding)
+                    VALUES (:content, :metadata, :embedding)
+                """),
+                {
+                    "content": chunk.page_content,
+                    "metadata": json.dumps(chunk.metadata),
+                    "embedding": str(embedding),
+                },
+            )
+
+    logger.info(f"Added {len(chunks)} chunks to Supabase.")
+    return len(chunks)
+
+
+def similarity_search_with_scores(
+    query: str,
+    k: int | None = None,
+) -> List[Tuple[Document, float]]:
+    """
+    Return top-k relevant chunks as (Document, similarity_score).
+    """
+    k = k or settings.top_k_docs
+
+    embeddings_model = get_embeddings()
+    query_embedding = embeddings_model.embed_query(query)
+
+    with engine.begin() as conn:
+        result = conn.execute(
+            text("""
+                SELECT content, metadata, similarity
+                FROM match_documents(
+                    CAST(:query_embedding AS vector),
+                    :match_count
+                )
+            """),
+            {
+                "query_embedding": str(query_embedding),
+                "match_count": k,
+            },
+        )
+
+        rows = result.fetchall()
+
+    results = []
+
+    for content, metadata, similarity in rows:
+        if isinstance(metadata, str):
+            metadata = json.loads(metadata)
+
+        doc = Document(
+            page_content=content,
+            metadata=metadata or {},
+        )
+
+        results.append(
+            (
+                doc,
+                float(similarity),
+            )
+        )
+
+    logger.info(f"Retrieved {len(results)} similar documents.")
+
+    return results
+
+
+def collection_size() -> int:
+    """
+    Return number of stored chunks.
+    """
+    with engine.begin() as conn:
+        result = conn.execute(
+            text("SELECT COUNT(*) FROM documents")
+        )
+
+        count = result.scalar()
+
+    return count
+
+
+def clear_collection() -> None:
+    """
+    Delete all documents from Supabase documents table.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            text("DELETE FROM documents")
+        )
+
+    logger.warning("Supabase vector store cleared.")
