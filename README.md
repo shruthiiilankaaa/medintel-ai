@@ -61,36 +61,25 @@ Every response includes:
 ## 🏗️ System Architecture
 
 ```text
-PDF Upload
-    │
-    ▼
-PyMuPDF Text Extraction
-    │
-    ▼
-LangChain Chunking
-    │
-    ▼
-Sentence Transformer Embeddings
-(all-MiniLM-L6-v2)
-    │
-    ▼
-Supabase PostgreSQL + pgvector
-    │
-    ▼
-Semantic Similarity Search
-    │
-    ▼
-Groq Llama 3.1
-    │
-    ▼
-Answer Generation
-    │
-    ▼
-Citations + Confidence Score
-    │
-    ▼
-FastAPI Response
-```
+┌────────────────┐      ┌─────────────────────────┐      ┌────────────────────────┐
+│  Medical PDF   │ ───> │ PyMuPDF Text Extraction │ ───> │ Recursive Text Chunking│
+└────────────────┘      └─────────────────────────┘      └────────────────────────┘
+                                                                     │
+                                                                     ▼
+┌────────────────┐      ┌─────────────────────────┐      ┌────────────────────────┐
+│   User Query   │      │ Supabase Vector DB      │      │ Sentence Transformers  │
+└────────┬───────┘      │ (PostgreSQL + pgvector) │ <─── │   (Vector Embeddings)  │
+         │              └────────────┬────────────┘      └────────────────────────┘
+         ▼                           │
+┌────────────────┐                   │ (Top-K Context)
+│ Semantic Match │ <─────────────────┘
+└────────┬───────┘
+         │
+         ▼
+┌────────────────┐      ┌─────────────────────────┐
+│ Groq Llama 3.1 │ ───> │ Grounded Response       │
+└────────────────┘      │ + Citations & Confidence│
+                        └─────────────────────────┘
 
 ---
 
