@@ -80,6 +80,7 @@ Every response includes:
 │ Groq Llama 3.1 │ ───> │ Grounded Response       │
 └────────────────┘      │ + Citations & Confidence│
                         └─────────────────────────┘
+```
 
 ---
 
@@ -106,7 +107,6 @@ Every response includes:
 
 ```text
 What is MIC?
-```
 
 ### Retrieval Pipeline
 
