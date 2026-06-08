@@ -39,7 +39,7 @@ async def query_documents(request: QueryRequest):
     try:
         rag_response = answer_query(request.query)
     except Exception as e:
-        logger.exception("FULL QUERY ERROR")
+        logger.error(f"Query failed: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Query error: {str(e)}"
@@ -63,18 +63,11 @@ async def query_documents(request: QueryRequest):
         total_citations=len(citations_out),
     )
 
-@router.get("/health", tags=["System"])
+@router.get("/health", response_model=HealthResponse, tags=["System"])
 async def health_check():
-    try:
-        docs = collection_size()
-        db_status = "connected"
-    except Exception as e:
-        docs = -1
-        db_status = str(e)
-
     return HealthResponse(
-    status="ok",
-    documents_indexed=collection_size(),
-    embedding_model=settings.embedding_model,
-    llm_model=settings.llm_model,
-)
+        status="ok",
+        documents_indexed=collection_size(),
+        embedding_model=settings.embedding_model,
+        llm_model=settings.llm_model,
+    )
