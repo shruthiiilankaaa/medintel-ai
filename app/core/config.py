@@ -11,7 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     # Models
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    llm_model: str = "google/flan-t5-base"
+    llm_model: str = "llama-3.1-8b-instant"
 
     # Vector DB
     chroma_persist_dir: str = "./data/chroma_db"
